@@ -95,6 +95,14 @@ except Exception as e:
     st.info("💡 .streamlit/secrets.toml에 Supabase URL과 API 키를 설정해주세요.")
     st.stop()
 
+# 캐시 무효화 버튼 (사이드바)
+with st.sidebar:
+    st.divider()
+    if st.button("🔄 데이터 새로고침", use_container_width=True):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.rerun()
+
 # ── 헤더 ─────────────────────────────────────────────────────
 st.title("📺 홈앤쇼핑 방송 현황 대시보드")
 st.caption("CG 자막 제작팀 업무 데이터")
