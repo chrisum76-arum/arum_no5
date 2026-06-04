@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from pathlib import Path
+from supabase import create_client, Client
+import datetime
 
 st.set_page_config(
     page_title="홈앤쇼핑 방송 현황",
@@ -27,28 +28,46 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-CSV_PATH = Path(__file__).parent / "homeshoping_broadcast_sample_data.csv"
+# ── Supabase 연결 ─────────────────────────────────────────────
+@st.cache_resource
+def init_supabase() -> Client:
+    url = st.secrets["supabase_url"]
+    key = st.secrets["supabase_key"]
+    return create_client(url, key)
+
+supabase = init_supabase()
 
 # ── 데이터 로드 ───────────────────────────────────────────────
+@st.cache_data(ttl=300)
 def load_data():
-    df = pd.read_csv(CSV_PATH, encoding="utf-8-sig")
+    response = supabase.table("broadcast_schedule").select("*").execute()
+    df = pd.DataFrame(response.data)
+
+    # 컬럼명 영문 → 한글로 변환
+    df.columns = ['id', '날짜', '방송시간', '방송상품명', '상품카테고리', '제작자', '론칭여부', '난이도', 'created_at']
+
+    # 날짜 타입 변환
     df["날짜"] = pd.to_datetime(df["날짜"])
     df["난이도_수치"] = df["난이도"].map({"하": 1, "중": 2, "상": 3})
-    # 론칭여부 컬럼 없으면 기본값 'O' 추가 (이전 버전 호환)
-    if "론칭여부" not in df.columns:
-        df.insert(5, "론칭여부", "O")
+
     return df
 
-def save_data(df: pd.DataFrame):
-    save_df = df.drop(columns=["난이도_수치"], errors="ignore")
-    save_df["날짜"] = save_df["날짜"].dt.strftime("%Y-%m-%d")
-    save_df.to_csv(CSV_PATH, index=False, encoding="utf-8-sig")
+def save_data(updates: list):
+    """
+    updates: [{"id": 1, "론칭여부": "O"}, ...]
+    """
+    for update in updates:
+        supabase.table("broadcast_schedule").update(
+            {"launched": update["launched"]}
+        ).eq("id", update["id"]).execute()
 
-# ── 세션 상태로 데이터 관리 ───────────────────────────────────
-if "df" not in st.session_state:
-    st.session_state.df = load_data()
-
-df = st.session_state.df
+# ── 데이터 로드 (매번 Supabase에서 조회) ──────────────────────
+try:
+    df = load_data()
+except Exception as e:
+    st.error(f"❌ Supabase 연결 오류: {str(e)}")
+    st.info("💡 .streamlit/secrets.toml에 Supabase URL과 API 키를 설정해주세요.")
+    st.stop()
 
 # ── 헤더 ─────────────────────────────────────────────────────
 st.title("📺 홈앤쇼핑 방송 현황 대시보드")
@@ -256,18 +275,29 @@ edited = st.data_editor(
 # ── 저장 버튼 ─────────────────────────────────────────────────
 if st.button("💾 변경 내용 저장", type="primary"):
     # 아이콘 → 원래 값으로 역변환
-    rev_launch = {"✅ O": "O", "❌ X": "X"}
-    rev_diff   = {"🟢 하": "하", "🟡 중": "중", "🔴 상": "상"}
+    rev_launch = {"✅ O": True, "❌ X": False}
 
-    edited["론칭여부"] = edited["론칭여부"].map(rev_launch)
-    edited["난이도"]   = edited["난이도"].map(rev_diff)
+    # 변경사항 수집
+    updates = []
+    for orig_idx, edited_row in zip(filtered.index, edited.itertuples(index=False)):
+        original_launched = df.at[orig_idx, "론칭여부"] == "O"
+        new_launched = edited_row.논칭여부 == "✅ O"
 
-    # 필터 결과의 인덱스를 원본 df에 반영
-    for idx, row in zip(filtered.index, edited.itertuples(index=False)):
-        st.session_state.df.at[idx, "론칭여부"] = row.론칭여부
+        if original_launched != new_launched:
+            updates.append({
+                "id": int(df.at[orig_idx, "id"]),
+                "launched": new_launched
+            })
 
-    save_data(st.session_state.df)
-    st.success(f"✅ {len(filtered)}건이 저장되었습니다.")
-    st.rerun()
+    if updates:
+        try:
+            save_data(updates)
+            st.cache_data.clear()
+            st.success(f"✅ {len(updates)}건이 저장되었습니다.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"❌ 저장 중 오류 발생: {str(e)}")
+    else:
+        st.info("변경된 내용이 없습니다.")
 
 st.caption(f"총 {total:,}건 표시 중")
