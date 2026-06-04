@@ -31,8 +31,28 @@ st.markdown("""
 # ── Supabase 연결 ─────────────────────────────────────────────
 @st.cache_resource
 def init_supabase() -> Client:
-    url = st.secrets["supabase_url"]
-    key = st.secrets["supabase_key"]
+    try:
+        url = st.secrets["supabase_url"]
+        key = st.secrets["supabase_key"]
+    except KeyError:
+        st.error("❌ Supabase 설정 오류")
+        st.markdown("""
+        ### Streamlit Cloud에서 설정하기:
+        1. 앱 우측 상단 ⋮ → **Settings**
+        2. **[Secrets]** 탭 → **Edit secrets.toml**
+        3. 다음을 입력:
+        ```toml
+        supabase_url = "https://your-project.supabase.co"
+        supabase_key = "your-anon-key"
+        ```
+        4. **Save** 클릭 후 1-2분 대기
+
+        ### Supabase 키 찾기:
+        - Supabase 대시보드 → Settings → API
+        - **Project URL** 복사
+        - **anon public key** 복사
+        """)
+        st.stop()
     return create_client(url, key)
 
 supabase = init_supabase()
