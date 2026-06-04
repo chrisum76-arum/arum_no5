@@ -1,7 +1,11 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
-import datetime
+import os
+from dotenv import load_dotenv
+
+# .env 파일 로드 (로컬 개발용)
+load_dotenv()
 
 st.set_page_config(
     page_title="홈앤쇼핑 방송 현황",
@@ -31,29 +35,31 @@ st.markdown("""
 # ── Supabase 연결 ─────────────────────────────────────────────
 @st.cache_resource
 def init_supabase() -> Client:
+    # 우선순위: secrets → 환경변수 → 하드코딩된 값
     try:
-        url = st.secrets["supabase_url"]
-        key = st.secrets["supabase_key"]
-    except KeyError:
-        st.error("❌ Supabase 설정 오류")
-        st.markdown("""
-        ### Streamlit Cloud에서 설정하기:
-        1. 앱 우측 상단 ⋮ → **Settings**
-        2. **[Secrets]** 탭 → **Edit secrets.toml**
-        3. 다음을 입력:
-        ```toml
-        supabase_url = "https://your-project.supabase.co"
-        supabase_key = "your-anon-key"
-        ```
-        4. **Save** 클릭 후 1-2분 대기
+        url = st.secrets.get("supabase_url")
+        key = st.secrets.get("supabase_key")
+    except:
+        url = None
+        key = None
 
-        ### Supabase 키 찾기:
-        - Supabase 대시보드 → Settings → API
-        - **Project URL** 복사
-        - **anon public key** 복사
-        """)
+    # secrets가 없으면 환경변수 사용
+    if not url:
+        url = os.getenv("SUPABASE_URL")
+    if not key:
+        key = os.getenv("SUPABASE_KEY")
+
+    # 환경변수도 없으면 기본값 사용 (프로덕션용)
+    if not url:
+        url = "https://zsgmfufqetfwhpcjkhgs.supabase.co"
+    if not key:
+        key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzZ21mdWZxZXRmd2hwY2praGdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1NTM0NDYsImV4cCI6MjA5NjEyOTQ0Nn0.GJ-SEB4Bxfiu1OzbP1Hs8qQOgDh-PBRi4F0eCpFYKlo"
+
+    try:
+        return create_client(url, key)
+    except Exception as e:
+        st.error(f"❌ Supabase 연결 실패: {str(e)}")
         st.stop()
-    return create_client(url, key)
 
 supabase = init_supabase()
 
