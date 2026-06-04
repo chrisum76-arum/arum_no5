@@ -64,13 +64,13 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # ── 데이터 로드 ───────────────────────────────────────────────
-@st.cache_data(ttl=300)
 def load_data():
+    """Supabase에서 최신 데이터 조회 (캐시 없음 - 항상 최신 데이터)"""
     response = supabase.table("broadcast_schedule").select("*").execute()
     df = pd.DataFrame(response.data)
 
     # 컬럼명 영문 → 한글로 변환
-    df.columns = ['id', '날짜', '방송시간', '방송상품명', '상품카테고리', '제작자', '론칭여부', '난이도', 'created_at']
+    df.columns = ['id', '날짜', '방송시간', '방송상품명', '상품카테고리', '제작자', '논칭여부', '난이도', 'created_at']
 
     # 날짜 타입 변환
     df["날짜"] = pd.to_datetime(df["날짜"])
